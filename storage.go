@@ -64,7 +64,7 @@ type (
 	BackendStream interface {
 		Backend
 		// ListObjectStreams(prefix string) ([]ObjectStream, error)
-		GetObjectStream(path string) (ObjectStream, error)
+		GetObjectStream(path string) (*ObjectStream, error)
 		PutObjectStream(path string, content io.Reader) error
 	}
 )

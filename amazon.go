@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	pathutil "path"
 	"strings"
@@ -116,39 +117,28 @@ func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 // GetObject retrieves an object from Amazon S3 bucket, at prefix
 func (b AmazonS3Backend) GetObject(path string) (Object, error) {
 	var object Object
-	object.Path = path
-	var content []byte
-	s3Input := &s3.GetObjectInput{
-		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
-	}
-	s3Result, err := b.Client.GetObject(s3Input)
+
+	result, err := b.GetObjectStream(path)
 	if err != nil {
+		object.Path = path
 		return object, err
 	}
-	content, err = ioutil.ReadAll(s3Result.Body)
+	defer result.Content.Close()
+
+	object.Metadata = result.Metadata
+
+	var content []byte
+	content, err = ioutil.ReadAll(result.Content)
 	if err != nil {
 		return object, err
 	}
 	object.Content = content
-	object.LastModified = *s3Result.LastModified
 	return object, nil
 }
 
 // PutObject uploads an object to Amazon S3 bucket, at prefix
 func (b AmazonS3Backend) PutObject(path string, content []byte) error {
-	s3Input := &s3manager.UploadInput{
-		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
-		Body:   bytes.NewBuffer(content),
-	}
-
-	if b.SSE != "" {
-		s3Input.ServerSideEncryption = aws.String(b.SSE)
-	}
-
-	_, err := b.Uploader.Upload(s3Input)
-	return err
+	return b.PutObjectStream(path, bytes.NewBuffer(content))
 }
 
 // DeleteObject removes an object from Amazon S3 bucket, at prefix
@@ -158,5 +148,38 @@ func (b AmazonS3Backend) DeleteObject(path string) error {
 		Key:    aws.String(pathutil.Join(b.Prefix, path)),
 	}
 	_, err := b.Client.DeleteObject(s3Input)
+	return err
+}
+
+// GetObjectStream retrieves an object stream from Amazon S3 bucket, at prefix
+func (b AmazonS3Backend) GetObjectStream(path string) (*ObjectStream, error) {
+	object := &ObjectStream{}
+	object.Path = path
+	s3Input := &s3.GetObjectInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+	}
+	s3Result, err := b.Client.GetObject(s3Input)
+	if err != nil {
+		return object, err
+	}
+	object.Content = s3Result.Body
+	object.LastModified = *s3Result.LastModified
+	return object, nil
+}
+
+// PutObject uploads an object stream to Amazon S3 bucket, at prefix
+func (b AmazonS3Backend) PutObjectStream(path string, content io.Reader) error {
+	s3Input := &s3manager.UploadInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+		Body:   content,
+	}
+
+	if b.SSE != "" {
+		s3Input.ServerSideEncryption = aws.String(b.SSE)
+	}
+
+	_, err := b.Uploader.Upload(s3Input)
 	return err
 }
