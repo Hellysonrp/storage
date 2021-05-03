@@ -70,9 +70,11 @@ func (b GoogleCSBackend) ListObjects(prefix string) ([]Object, error) {
 			continue
 		}
 		object := Object{
-			Path:         path,
-			Content:      []byte{},
-			LastModified: attrs.Updated,
+			Metadata: Metadata{
+				Path:         path,
+				LastModified: attrs.Updated,
+			},
+			Content: []byte{},
 		}
 		objects = append(objects, object)
 	}

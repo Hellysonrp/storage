@@ -115,9 +115,11 @@ func (b NeteaseNOSBackend) ListObjects(prefix string) ([]Object, error) {
 			// LastModified time layout in NOS is 2006-01-02T15:04:05 -0700
 			t, _ := time.ParseInLocation("2006-01-02T15:04:05 -0700", obj.LastModified, local)
 			object := Object{
-				Path:         path,
-				Content:      []byte{},
-				LastModified: t,
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: t,
+				},
+				Content: []byte{},
 			}
 			objects = append(objects, object)
 		}

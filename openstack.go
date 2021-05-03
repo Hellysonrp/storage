@@ -253,9 +253,11 @@ func (b OpenstackOSBackend) ListObjects(prefix string) ([]Object, error) {
 			}
 
 			object := Object{
-				Path:         path,
-				Content:      []byte{},
-				LastModified: lastModified,
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: lastModified,
+				},
+				Content: []byte{},
 			}
 			objects = append(objects, object)
 		}

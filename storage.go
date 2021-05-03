@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,16 +27,21 @@ import (
 type (
 	// Object is a generic representation of a storage object
 	Object struct {
-		Meta         Metadata
-		Path         string
-		Content      []byte
-		LastModified time.Time
+		Metadata
+		Content []byte
+	}
+	// ObjectStream is a generic representation of a storage object with a stream to its content
+	ObjectStream struct {
+		Metadata
+		Content io.ReadCloser
 	}
 	// Metadata represents the meta information of the object
 	// includes object name , object version , etc...
 	Metadata struct {
-		Name    string
-		Version string
+		Name         string
+		Path         string
+		Version      string
+		LastModified time.Time
 	}
 
 	// ObjectSliceDiff provides information on what has changed since last calling ListObjects
@@ -52,6 +58,14 @@ type (
 		GetObject(path string) (Object, error)
 		PutObject(path string, content []byte) error
 		DeleteObject(path string) error
+	}
+
+	// BackendStream is a generic interface for storage backends that support streams-
+	BackendStream interface {
+		Backend
+		// ListObjectStreams(prefix string) ([]ObjectStream, error)
+		GetObjectStream(path string) (ObjectStream, error)
+		PutObjectStream(path string, content io.Reader) error
 	}
 )
 

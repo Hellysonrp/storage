@@ -90,9 +90,11 @@ func (b MicrosoftBlobBackend) ListObjects(prefix string) ([]Object, error) {
 			}
 
 			object := Object{
-				Path:         path,
-				Content:      []byte{},
-				LastModified: time.Time(blob.Properties.LastModified),
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: time.Time(blob.Properties.LastModified),
+				},
+				Content: []byte{},
 			}
 
 			objects = append(objects, object)

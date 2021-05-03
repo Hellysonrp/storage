@@ -170,15 +170,19 @@ func (suite *StorageTestSuite) TestGetObject() {
 func (suite *StorageTestSuite) TestHasSuffix() {
 	now := time.Now()
 	o1 := Object{
-		Path:         "mychart-0.1.0.tgz",
-		Content:      []byte{},
-		LastModified: now,
+		Metadata: Metadata{
+			Path:         "mychart-0.1.0.tgz",
+			LastModified: now,
+		},
+		Content: []byte{},
 	}
 	suite.True(o1.HasExtension("tgz"), "object has tgz suffix")
 	o2 := Object{
-		Path:         "mychart-0.1.0.txt",
-		Content:      []byte{},
-		LastModified: now,
+		Metadata: Metadata{
+			Path:         "mychart-0.1.0.txt",
+			LastModified: now,
+		},
+		Content: []byte{},
 	}
 	suite.False(o2.HasExtension("tgz"), "object does not have tgz suffix")
 }
@@ -187,9 +191,11 @@ func (suite *StorageTestSuite) TestGetObjectSliceDiff() {
 	now := time.Now()
 	os1 := []Object{
 		{
-			Path:         "test1.txt",
-			Content:      []byte{},
-			LastModified: now,
+			Metadata: Metadata{
+				Path:         "test1.txt",
+				LastModified: now,
+			},
+			Content: []byte{},
 		},
 	}
 	var os2 []Object
@@ -229,9 +235,11 @@ func (suite *StorageTestSuite) TestGetObjectSliceDiff() {
 
 	os2[0].LastModified = now
 	os2 = append(os2, Object{
-		Path:         "test2.txt",
-		Content:      []byte{},
-		LastModified: now,
+		Metadata: Metadata{
+			Path:         "test2.txt",
+			LastModified: now,
+		},
+		Content: []byte{},
 	})
 	diff = GetObjectSliceDiff(os1, os2, time.Duration(0))
 	suite.True(diff.Change, "change detected")

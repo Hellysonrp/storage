@@ -158,9 +158,11 @@ func (b OracleCSBackend) ListObjects(prefix string) ([]Object, error) {
 		}
 
 		object := Object{
-			Path:         path,
-			Content:      []byte{},
-			LastModified: t,
+			Metadata: Metadata{
+				Path:         path,
+				LastModified: t,
+			},
+			Content: []byte{},
 		}
 		objects = append(objects, object)
 	}

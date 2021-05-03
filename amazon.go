@@ -97,9 +97,11 @@ func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 				continue
 			}
 			object := Object{
-				Path:         path,
-				Content:      []byte{},
-				LastModified: *obj.LastModified,
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: *obj.LastModified,
+				},
+				Content: []byte{},
 			}
 			objects = append(objects, object)
 		}

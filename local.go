@@ -44,7 +44,7 @@ func (b LocalFilesystemBackend) ListObjects(prefix string) ([]Object, error) {
 	var objects []Object
 	files, err := ioutil.ReadDir(pathutil.Join(b.RootDirectory, prefix))
 	if err != nil {
-		if os.IsNotExist(err) {  // OK if the directory doesnt exist yet
+		if os.IsNotExist(err) { // OK if the directory doesnt exist yet
 			err = nil
 		}
 		return objects, err
@@ -53,7 +53,13 @@ func (b LocalFilesystemBackend) ListObjects(prefix string) ([]Object, error) {
 		if f.IsDir() {
 			continue
 		}
-		object := Object{Path: f.Name(), Content: []byte{}, LastModified: f.ModTime()}
+		object := Object{
+			Metadata: Metadata{
+				Path:         f.Name(),
+				LastModified: f.ModTime(),
+			},
+			Content: []byte{},
+		}
 		objects = append(objects, object)
 	}
 	return objects, nil

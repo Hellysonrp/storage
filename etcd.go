@@ -127,9 +127,11 @@ func (e *etcdStorage) ListObjects(prefix string) ([]Object, error) {
 				modtime = time.Unix(kv.ModRevision, 0)
 			}
 			objs = append(objs, Object{
-				Path:         path,
-				Content:      kv.Value,
-				LastModified: modtime,
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: modtime,
+				},
+				Content: kv.Value,
 			})
 		}
 	}
@@ -157,9 +159,11 @@ func (e *etcdStorage) GetObject(path string) (Object, error) {
 		modifytime = time.Unix(resps.Kvs[0].ModRevision, 0)
 	}
 	return Object{
-		Path:         path,
-		Content:      resps.Kvs[0].Value,
-		LastModified: modifytime,
+		Metadata: Metadata{
+			Path:         path,
+			LastModified: modifytime,
+		},
+		Content: resps.Kvs[0].Value,
 	}, nil
 }
 

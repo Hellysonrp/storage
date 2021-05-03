@@ -109,9 +109,11 @@ func (t TencentCloudCOSBackend) ListObjects(prefix string) ([]Object, error) {
 			}
 			lastModified, _ := time.Parse(time.RFC3339, obj.LastModified)
 			object := Object{
-				Path:         path,
-				Content:      []byte{},
-				LastModified: lastModified,
+				Metadata: Metadata{
+					Path:         path,
+					LastModified: lastModified,
+				},
+				Content: []byte{},
 			}
 			objects = append(objects, object)
 		}
