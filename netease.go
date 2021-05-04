@@ -24,10 +24,10 @@ import (
 
 	"time"
 
-	"github.com/NetEase-Object-Storage/nos-golang-sdk/config"
-	"github.com/NetEase-Object-Storage/nos-golang-sdk/logger"
-	"github.com/NetEase-Object-Storage/nos-golang-sdk/model"
-	"github.com/NetEase-Object-Storage/nos-golang-sdk/nosclient"
+	"github.com/Hellysonrp/nos-golang-sdk/config"
+	"github.com/Hellysonrp/nos-golang-sdk/logger"
+	"github.com/Hellysonrp/nos-golang-sdk/model"
+	"github.com/Hellysonrp/nos-golang-sdk/nosclient"
 )
 
 const (
