@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,6 +67,7 @@ type (
 		// ListObjectStreams(prefix string) ([]ObjectStream, error)
 		GetObjectStream(path string) (*ObjectStream, error)
 		PutObjectStream(path string, content io.Reader) error
+		HandleHttpFileDownload(w http.ResponseWriter, r *http.Request, path string)
 	}
 )
 

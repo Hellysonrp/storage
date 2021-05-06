@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 
 	pathutil "path"
@@ -160,4 +161,17 @@ func (b LocalFilesystemBackend) PutObjectStream(path string, content io.Reader) 
 	}
 
 	return fp.Close()
+}
+
+func (b LocalFilesystemBackend) HandleHttpFileDownload(w http.ResponseWriter, r *http.Request, path string) {
+	obj, err := b.GetObjectStream(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	rs := obj.Content.(io.ReadSeeker)
+	http.ServeContent(w, r, obj.Name, obj.LastModified, rs)
 }

@@ -20,10 +20,14 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"net/http"
 	pathutil "path"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -182,4 +186,153 @@ func (b AmazonS3Backend) PutObjectStream(path string, content io.Reader) error {
 
 	_, err := b.Uploader.Upload(s3Input)
 	return err
+}
+
+func (b AmazonS3Backend) HandleHttpFileDownload(w http.ResponseWriter, r *http.Request, path string) {
+	// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/server/server.go#L238
+
+	// Get If-Modified-Since as string
+	ifModifiedSinceStr := r.Header.Get("If-Modified-Since")
+	// Create result
+	var ifModifiedSince *time.Time
+	// Check if content exists
+	if ifModifiedSinceStr != "" {
+		// Parse time
+		ifModifiedSinceTime, err := http.ParseTime(ifModifiedSinceStr)
+		// Check error
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// Save result
+		ifModifiedSince = &ifModifiedSinceTime
+	}
+
+	// Get If-Match
+	ifMatch := r.Header.Get("If-Match")
+
+	// Get If-None-Match
+	ifNoneMatch := r.Header.Get("If-None-Match")
+
+	// Get If-Unmodified-Since as string
+	ifUnmodifiedSinceStr := r.Header.Get("If-Unmodified-Since")
+	// Create result
+	var ifUnmodifiedSince *time.Time
+	// Check if content exists
+	if ifUnmodifiedSinceStr != "" {
+		// Parse time
+		ifUnmodifiedSinceTime, err := http.ParseTime(ifUnmodifiedSinceStr)
+		// Check error
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// Save result
+		ifUnmodifiedSince = &ifUnmodifiedSinceTime
+	}
+
+	s3Input := &s3.GetObjectInput{
+		Bucket:            aws.String(b.Bucket),
+		Key:               aws.String(pathutil.Join(b.Prefix, path)),
+		IfModifiedSince:   ifModifiedSince,
+		IfUnmodifiedSince: ifUnmodifiedSince,
+	}
+
+	// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/s3client/s3Context.go#L161
+
+	// Add If Match if not empty
+	if ifMatch != "" {
+		s3Input.IfMatch = aws.String(ifMatch)
+	}
+
+	// Add If None Match if not empty
+	if ifNoneMatch != "" {
+		s3Input.IfNoneMatch = aws.String(ifNoneMatch)
+	}
+
+	s3Result, err := b.Client.GetObject(s3Input)
+	if err != nil {
+		aerr, ok := err.(awserr.Error)
+		if ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchKey:
+				w.WriteHeader(http.StatusNotFound)
+			case "NotModified":
+				w.WriteHeader(http.StatusNotModified)
+			case "PreconditionFailed":
+				w.WriteHeader(http.StatusPreconditionFailed)
+			default:
+				w.WriteHeader(http.StatusBadRequest)
+			}
+			return
+		}
+
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/bucket/utils.go#L15
+	// set headers
+	httpStatus := http.StatusOK
+	if s3Result.CacheControl != nil {
+		w.Header().Add("Cache-Control", *s3Result.CacheControl)
+	}
+
+	if s3Result.Expires != nil {
+		w.Header().Add("Expires", *s3Result.Expires)
+	}
+
+	if s3Result.ContentDisposition != nil {
+		w.Header().Add("Content-Disposition", *s3Result.ContentDisposition)
+	}
+
+	if s3Result.ContentEncoding != nil {
+		w.Header().Add("Content-Encoding", *s3Result.ContentEncoding)
+	}
+
+	if s3Result.ContentLanguage != nil {
+		w.Header().Add("Content-Language", *s3Result.ContentLanguage)
+	}
+
+	if s3Result.ContentLength != nil {
+		w.Header().Add("Content-Length", strconv.FormatInt(*s3Result.ContentLength, 10))
+	}
+
+	if s3Result.ContentRange != nil {
+		w.Header().Add("Content-Range", *s3Result.ContentRange)
+
+		// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/bucket/utils.go#L31
+		if len(*s3Result.ContentRange) > 0 && s3Result.ContentLength != nil {
+			//https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/bucket/utils.go#L62
+			s := strings.Split(*s3Result.ContentRange, "/")
+			if len(s) > 1 {
+				totalSizeString := s[1]
+				totalSizeString = strings.TrimSpace(totalSizeString)
+
+				totalSize, err := strconv.ParseInt(totalSizeString, 10, 64)
+				if err == nil && totalSize != *s3Result.ContentLength {
+					httpStatus = http.StatusPartialContent
+				}
+			}
+		}
+	}
+
+	if s3Result.ContentType != nil {
+		w.Header().Add("Content-Type", *s3Result.ContentType)
+	}
+
+	if s3Result.ETag != nil {
+		w.Header().Add("ETag", *s3Result.ETag)
+	}
+
+	if s3Result.LastModified != nil {
+		w.Header().Add("Last-Modified", s3Result.LastModified.UTC().Format(http.TimeFormat))
+	}
+
+	w.WriteHeader(httpStatus)
+
+	_, err = io.Copy(w, s3Result.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
