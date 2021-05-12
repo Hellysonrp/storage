@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"io/ioutil"
 	"os"
 	pathutil "path"
@@ -167,6 +168,16 @@ func (b OracleCSBackend) ListObjects(prefix string) ([]Object, error) {
 		objects = append(objects, object)
 	}
 	return objects, nil
+}
+
+// ListObjectsFromDirectory lists all objects under prefix, always with depth 1, returning at most limit objects (directories + files)
+// It's intent is to abstract a directory listing
+// Make sure prefix is a full path, other cases might give unexpected results
+// If limit <= 0, it will return at most all the objects in 'prefix', limiting only by the backend limits
+// You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
+func (b OracleCSBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
+	// TODO
+	return nil, errors.New("not implemented")
 }
 
 // GetObject retrieves an object from OCI Object Storage bucket, at prefix

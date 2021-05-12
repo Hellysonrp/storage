@@ -45,6 +45,15 @@ type (
 		LastModified time.Time
 	}
 
+	ListObjectsFromDirectoryOutput interface {
+		GetDirectories() []Metadata
+		GetFiles() []Metadata
+		IsTruncated() bool
+		NextPage() (ListObjectsFromDirectoryOutput, error)
+		FreeFromMemory()
+		Close()
+	}
+
 	// ObjectSliceDiff provides information on what has changed since last calling ListObjects
 	ObjectSliceDiff struct {
 		Change  bool
@@ -56,6 +65,7 @@ type (
 	// Backend is a generic interface for storage backends
 	Backend interface {
 		ListObjects(prefix string) ([]Object, error)
+		ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error)
 		GetObject(path string) (Object, error)
 		PutObject(path string, content []byte) error
 		DeleteObject(path string) error

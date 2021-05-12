@@ -18,6 +18,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -27,6 +28,81 @@ import (
 	pathutil "path"
 	"path/filepath"
 )
+
+type localListObjectsFromDirectoryOutput struct {
+	prefix          string
+	directory       *os.File
+	limit           int
+	filesRead       []Metadata
+	directoriesRead []Metadata
+	nextPageCalled  bool
+	isEOF           bool
+}
+
+func (l *localListObjectsFromDirectoryOutput) GetDirectories() []Metadata {
+	return l.directoriesRead
+}
+
+func (l *localListObjectsFromDirectoryOutput) GetFiles() []Metadata {
+	return l.filesRead
+}
+
+func (l *localListObjectsFromDirectoryOutput) IsTruncated() bool {
+	return !l.isEOF
+}
+
+func (l *localListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirectoryOutput, error) {
+	if l.nextPageCalled {
+		return nil, errors.New("you cannot call NextPage more than once")
+	}
+
+	r := &localListObjectsFromDirectoryOutput{
+		directory: l.directory,
+		prefix:    l.prefix,
+	}
+
+	if l.isEOF {
+		r.isEOF = true
+		return r, io.EOF
+	}
+
+	r.directoriesRead = make([]Metadata, 0, 5)
+	r.filesRead = make([]Metadata, 0, 5)
+
+	entries, err := l.directory.ReadDir(l.limit)
+
+	if len(entries) > 0 {
+		for _, e := range entries {
+			m := Metadata{
+				Path: pathutil.Join(l.prefix, e.Name()),
+			}
+			if e.IsDir() {
+				r.directoriesRead = append(r.directoriesRead, m)
+			} else {
+				r.filesRead = append(r.filesRead, m)
+			}
+		}
+	}
+
+	r.isEOF = (l.limit > 0 && err != nil && errors.Is(err, io.EOF)) || (l.limit <= 0 && err == nil)
+
+	if r.isEOF && err == nil {
+		// always returns io.EOF if EOF
+		err = io.EOF
+	}
+
+	return r, err
+}
+
+func (l *localListObjectsFromDirectoryOutput) FreeFromMemory() {
+	l.directoriesRead = nil
+	l.filesRead = nil
+}
+
+func (l *localListObjectsFromDirectoryOutput) Close() {
+	l.FreeFromMemory()
+	l.directory.Close()
+}
 
 // LocalFilesystemBackend is a storage backend for local filesystem storage
 type LocalFilesystemBackend struct {
@@ -67,6 +143,34 @@ func (b LocalFilesystemBackend) ListObjects(prefix string) ([]Object, error) {
 		objects = append(objects, object)
 	}
 	return objects, nil
+}
+
+// ListObjectsFromDirectory lists all objects under prefix, always with depth 1, returning at most limit objects (directories + files)
+// It's intent is to abstract a directory listing
+// Make sure prefix is a full path, other cases might give unexpected results
+// If limit <= 0, it will return at most all the objects in 'prefix', limiting only by the backend limits
+// You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
+func (b LocalFilesystemBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
+	f, err := os.Open(prefix)
+	if err != nil {
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() {
+		return nil, errors.New("prefix is not a directory")
+	}
+
+	var output ListObjectsFromDirectoryOutput
+	output = &localListObjectsFromDirectoryOutput{
+		prefix:    prefix,
+		limit:     limit,
+		directory: f,
+	}
+
+	return output.NextPage()
 }
 
 // GetObject retrieves an object from root directory
@@ -112,11 +216,14 @@ func (b LocalFilesystemBackend) GetObjectStream(path string) (*ObjectStream, err
 	if err != nil {
 		return object, err
 	}
-	object.Content = content
 	info, err := content.Stat()
 	if err != nil {
 		return object, err
 	}
+	if info.IsDir() {
+		return object, errors.New("path must lead to a file, found directory")
+	}
+	object.Content = content
 	object.LastModified = info.ModTime()
 	return object, err
 }
