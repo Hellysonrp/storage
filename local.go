@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 
 	pathutil "path"
 	"path/filepath"
@@ -170,8 +171,12 @@ func (b LocalFilesystemBackend) HandleHttpFileDownload(w http.ResponseWriter, r 
 			w.WriteHeader(http.StatusNotFound)
 		}
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
+	lastDirSeparatorIndex := strings.LastIndex(obj.Path, "/")
+	name := obj.Path[lastDirSeparatorIndex+1:]
+
 	rs := obj.Content.(io.ReadSeeker)
-	http.ServeContent(w, r, obj.Name, obj.LastModified, rs)
+	http.ServeContent(w, r, name, obj.LastModified, rs)
 }

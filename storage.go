@@ -39,9 +39,9 @@ type (
 	// Metadata represents the meta information of the object
 	// includes object name , object version , etc...
 	Metadata struct {
-		Name         string
-		Path         string
-		Version      string
+		// Name string
+		Path string
+		// Version      string
 		LastModified time.Time
 	}
 
