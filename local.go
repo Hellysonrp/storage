@@ -59,6 +59,7 @@ func (l *localListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirecto
 	r := &localListObjectsFromDirectoryOutput{
 		directory: l.directory,
 		prefix:    l.prefix,
+		limit:     l.limit,
 	}
 
 	if l.isEOF {
@@ -90,6 +91,8 @@ func (l *localListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirecto
 		// always returns io.EOF if EOF
 		err = io.EOF
 	}
+
+	l.nextPageCalled = true
 
 	return r, err
 }
@@ -151,8 +154,18 @@ func (b LocalFilesystemBackend) ListObjects(prefix string) ([]Object, error) {
 // If limit <= 0, it will return at most all the objects in 'prefix', limiting only by the backend limits
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b LocalFilesystemBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
-	f, err := os.Open(prefix)
+	output := &localListObjectsFromDirectoryOutput{
+		prefix: prefix,
+		limit:  limit,
+	}
+
+	fullPath := pathutil.Join(b.RootDirectory, prefix)
+	f, err := os.Open(fullPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			output.isEOF = true
+			return output, nil
+		}
 		return nil, err
 	}
 	fi, err := f.Stat()
@@ -163,12 +176,7 @@ func (b LocalFilesystemBackend) ListObjectsFromDirectory(prefix string, limit in
 		return nil, errors.New("prefix is not a directory")
 	}
 
-	var output ListObjectsFromDirectoryOutput
-	output = &localListObjectsFromDirectoryOutput{
-		prefix:    prefix,
-		limit:     limit,
-		directory: f,
-	}
+	output.directory = f
 
 	return output.NextPage()
 }
@@ -276,8 +284,9 @@ func (b LocalFilesystemBackend) HandleHttpFileDownload(w http.ResponseWriter, r 
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
 		}
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -286,4 +295,6 @@ func (b LocalFilesystemBackend) HandleHttpFileDownload(w http.ResponseWriter, r 
 
 	rs := obj.Content.(io.ReadSeeker)
 	http.ServeContent(w, r, name, obj.LastModified, rs)
+
+	obj.Content.Close()
 }
