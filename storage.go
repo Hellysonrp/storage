@@ -127,7 +127,10 @@ func removePrefixFromObjectPath(prefix string, path string) string {
 	if prefix == "" {
 		return path
 	}
-	path = strings.Replace(path, fmt.Sprintf("%s/", prefix), "", 1)
+	if !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+	path = strings.TrimPrefix(path, prefix)
 	return path
 }
 
