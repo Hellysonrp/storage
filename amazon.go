@@ -35,6 +35,124 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
+type s3ListObjectsFromDirectoryOutput struct {
+	backend           *AmazonS3Backend
+	prefix            string
+	limit             int
+	filesRead         []Metadata
+	directoriesRead   []Metadata
+	nextPageCalled    bool
+	isEOF             bool
+	continuationToken string
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) GetDirectories() []Metadata {
+	return l.directoriesRead
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) GetFiles() []Metadata {
+	return l.filesRead
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) IsTruncated() bool {
+	return !l.isEOF
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirectoryOutput, error) {
+	if l.nextPageCalled {
+		return nil, errors.New("you cannot call NextPage more than once")
+	}
+
+	r := &s3ListObjectsFromDirectoryOutput{
+		backend: l.backend,
+		prefix:  l.prefix,
+		limit:   l.limit,
+	}
+
+	if l.isEOF {
+		r.isEOF = true
+		return r, io.EOF
+	}
+
+	r.directoriesRead = make([]Metadata, 0, 5)
+	r.filesRead = make([]Metadata, 0, 5)
+
+	prefix := pathutil.Join(l.backend.Prefix, l.prefix)
+	prefix = strings.Trim(prefix, "/")
+	prefix = prefix + "/"
+
+	req := &s3.ListObjectsV2Input{
+		Bucket:    aws.String(l.backend.Bucket),
+		Prefix:    aws.String(prefix),
+		Delimiter: aws.String("/"),
+		MaxKeys:   aws.Int64(int64(l.limit)),
+	}
+	if l.continuationToken != "" {
+		req.ContinuationToken = aws.String(l.continuationToken)
+	}
+
+	output, err := l.backend.Client.ListObjectsV2(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if output.ContinuationToken != nil {
+		r.continuationToken = *output.ContinuationToken
+	}
+
+	for _, d := range output.CommonPrefixes {
+		if d.Prefix != nil && *d.Prefix != "" {
+			p := removePrefixFromObjectPath(l.backend.Prefix, *d.Prefix)
+			if !strings.HasPrefix(p, "/") {
+				p = "/" + p
+			}
+			if p != "" && p != "/" {
+				r.directoriesRead = append(r.directoriesRead, Metadata{
+					Path: p,
+				})
+			}
+		}
+	}
+
+	for _, f := range output.Contents {
+		if f.Key != nil && *f.Key != "" {
+			p := removePrefixFromObjectPath(l.backend.Prefix, *f.Key)
+			if !strings.HasPrefix(p, "/") {
+				p = "/" + p
+			}
+			if p != "" && p != "/" {
+				m := Metadata{
+					Path: p,
+				}
+				if f.LastModified != nil {
+					m.LastModified = *f.LastModified
+				}
+
+				r.filesRead = append(r.filesRead, m)
+			}
+		}
+	}
+
+	r.isEOF = output.IsTruncated == nil || !*output.IsTruncated
+	if r.isEOF {
+		err = io.EOF
+	}
+
+	l.nextPageCalled = true
+
+	return r, err
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) FreeFromMemory() {
+	l.directoriesRead = nil
+	l.filesRead = nil
+}
+
+func (l *s3ListObjectsFromDirectoryOutput) Close() {
+	l.FreeFromMemory()
+}
+
 // AmazonS3Backend is a storage backend for Amazon S3
 type AmazonS3Backend struct {
 	Bucket     string
@@ -125,8 +243,12 @@ func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 // If limit <= 0, it will return at most all the objects in 'prefix', limiting only by the backend limits
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
-	// TODO
-	return nil, errors.New("not implemented")
+	output := &s3ListObjectsFromDirectoryOutput{
+		prefix:  prefix,
+		limit:   limit,
+		backend: &b,
+	}
+	return output.NextPage()
 }
 
 // GetObject retrieves an object from Amazon S3 bucket, at prefix
@@ -185,10 +307,28 @@ func (b AmazonS3Backend) GetObjectStream(path string) (*ObjectStream, error) {
 
 // PutObject uploads an object stream to Amazon S3 bucket, at prefix
 func (b AmazonS3Backend) PutObjectStream(path string, content io.Reader) error {
+	var ct string
+	if seeker, ok := content.(io.ReadSeeker); ok {
+		buff := make([]byte, 512)
+		_, err := seeker.Seek(0, io.SeekStart)
+		if err == nil {
+			n, err := seeker.Read(buff)
+			if err == nil || errors.Is(err, io.EOF) {
+				ct = http.DetectContentType(buff[:n])
+			}
+			// try to seek to the beginning of the file
+			seeker.Seek(0, io.SeekStart)
+		}
+	}
+
 	s3Input := &s3manager.UploadInput{
 		Bucket: aws.String(b.Bucket),
 		Key:    aws.String(pathutil.Join(b.Prefix, path)),
 		Body:   content,
+	}
+
+	if ct != "" {
+		s3Input.ContentType = aws.String(ct)
 	}
 
 	if b.SSE != "" {
