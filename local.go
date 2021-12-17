@@ -93,9 +93,14 @@ func (l *localListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirecto
 	// TODO this boolean is based off of Readdir, not ReadDir; check if it's valid
 	r.isEOF = errors.Is(err, io.EOF) || (l.limit <= 0 && err == nil)
 
-	if r.isEOF && err == nil {
-		// always returns io.EOF if EOF
-		err = io.EOF
+	if r.isEOF {
+		if err == nil {
+			// always returns io.EOF if EOF
+			err = io.EOF
+		}
+
+		// close directory pointer if EOF
+		r.directory.Close()
 	}
 
 	l.nextPageCalled = true
