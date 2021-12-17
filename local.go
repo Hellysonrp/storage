@@ -218,7 +218,7 @@ func (b LocalFilesystemBackend) PutObject(path string, content []byte) error {
 func (b LocalFilesystemBackend) DeleteObject(path string) error {
 	fullpath := pathutil.Join(b.RootDirectory, path)
 	err := os.Remove(fullpath)
-	if err != nil {
+	if err == nil {
 		// if it succeeded to remove the object, try to remove the parent folder too
 		// this mimics the behavior of s3, that the folders don't actually exist and are only an abstraction of the object full name (path)
 		// we don't check if the folder is empty here, just try to delete it
