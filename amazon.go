@@ -251,7 +251,7 @@ func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (Lis
 	_, err := b.Client.HeadObject(s3Input)
 	if err != nil {
 		aerr, ok := err.(awserr.Error)
-		if ok && aerr.Code() != s3.ErrCodeNoSuchKey {
+		if ok && aerr.Code() != "NotFound" {
 			return nil, err
 		}
 	} else {
