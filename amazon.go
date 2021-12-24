@@ -421,6 +421,7 @@ func (b AmazonS3Backend) HandleHttpFileDownload(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	defer s3Result.Body.Close()
 
 	// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/bucket/utils.go#L15
 	// set headers
@@ -480,10 +481,13 @@ func (b AmazonS3Backend) HandleHttpFileDownload(w http.ResponseWriter, r *http.R
 		w.Header().Add("Last-Modified", s3Result.LastModified.UTC().Format(http.TimeFormat))
 	}
 
-	w.WriteHeader(httpStatus)
-
-	_, err = io.Copy(w, s3Result.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	if r.Method != http.MethodHead {
+		_, err = io.Copy(w, s3Result.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
+
+	w.WriteHeader(httpStatus)
 }
