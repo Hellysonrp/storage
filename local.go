@@ -184,7 +184,7 @@ func (b LocalFilesystemBackend) ListObjectsFromDirectory(prefix string, limit in
 		return nil, err
 	}
 	if !fi.IsDir() {
-		return nil, errors.New("prefix is not a directory")
+		return nil, ErrPrefixIsAnObject
 	}
 
 	output.directory = f

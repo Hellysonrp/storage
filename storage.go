@@ -71,7 +71,7 @@ type (
 		DeleteObject(path string) error
 	}
 
-	// BackendStream is a generic interface for storage backends that support streams-
+	// BackendStream is a generic interface for storage backends that support streams
 	BackendStream interface {
 		Backend
 		// ListObjectStreams(prefix string) ([]ObjectStream, error)

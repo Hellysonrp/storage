@@ -243,6 +243,21 @@ func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 // If limit <= 0, it will return at most all the objects in 'prefix', limiting only by the backend limits
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
+	s3Input := &s3.HeadObjectInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(pathutil.Join(b.Prefix, prefix)),
+	}
+
+	_, err := b.Client.HeadObject(s3Input)
+	if err != nil {
+		aerr, ok := err.(awserr.Error)
+		if ok && aerr.Code() != s3.ErrCodeNoSuchKey {
+			return nil, err
+		}
+	} else {
+		return nil, ErrPrefixIsAnObject
+	}
+
 	output := &s3ListObjectsFromDirectoryOutput{
 		prefix:  prefix,
 		limit:   limit,
