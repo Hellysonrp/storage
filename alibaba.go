@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -116,7 +115,12 @@ func (b AlibabaCloudOSSBackend) ListObjects(prefix string) ([]Object, error) {
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b AlibabaCloudOSSBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
 	// TODO
-	return nil, errors.New("not implemented")
+	return nil, ErrNotImplemented
+}
+
+func (b AlibabaCloudOSSBackend) RenamePrefixOrObject(path, newPath string) error {
+	// TODO
+	return ErrNotImplemented
 }
 
 // GetObject retrieves an object from Alibaba Cloud OSS bucket, at prefix

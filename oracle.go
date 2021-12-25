@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"io/ioutil"
 	"os"
 	pathutil "path"
@@ -177,7 +176,12 @@ func (b OracleCSBackend) ListObjects(prefix string) ([]Object, error) {
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b OracleCSBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
 	// TODO
-	return nil, errors.New("not implemented")
+	return nil, ErrNotImplemented
+}
+
+func (b OracleCSBackend) RenamePrefixOrObject(path, newPath string) error {
+	// TODO
+	return ErrNotImplemented
 }
 
 // GetObject retrieves an object from OCI Object Storage bucket, at prefix

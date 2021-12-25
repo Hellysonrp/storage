@@ -192,6 +192,29 @@ func (b LocalFilesystemBackend) ListObjectsFromDirectory(prefix string, limit in
 	return output.NextPage()
 }
 
+func (b LocalFilesystemBackend) RenamePrefixOrObject(path, newPath string) error {
+	fullPath := pathutil.Join(b.RootDirectory, path)
+	fullNewPath := pathutil.Join(b.RootDirectory, newPath)
+
+	// check if newPath is already occupied
+	_, err := os.Stat(fullNewPath)
+	if err == nil || !os.IsNotExist(err) {
+		return ErrNewPathNotEmpty
+	}
+
+	// check if source path exists
+	// ignore if not
+	_, err = os.Stat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	return os.Rename(fullPath, fullNewPath)
+}
+
 // GetObject retrieves an object from root directory
 func (b LocalFilesystemBackend) GetObject(path string) (Object, error) {
 	var object Object

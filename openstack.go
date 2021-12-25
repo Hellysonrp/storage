@@ -274,7 +274,12 @@ func (b OpenstackOSBackend) ListObjects(prefix string) ([]Object, error) {
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b OpenstackOSBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
 	// TODO
-	return nil, errors.New("not implemented")
+	return nil, ErrNotImplemented
+}
+
+func (b OpenstackOSBackend) RenamePrefixOrObject(path, newPath string) error {
+	// TODO
+	return ErrNotImplemented
 }
 
 // GetObject retrieves an object from an Openstack container, at prefix

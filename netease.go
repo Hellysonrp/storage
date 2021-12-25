@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"io/ioutil"
 	"os"
 	pathutil "path"
@@ -140,7 +139,12 @@ func (b NeteaseNOSBackend) ListObjects(prefix string) ([]Object, error) {
 // You can know if the response is complete calling output.IsTruncated(), if true then the response isn't complete
 func (b NeteaseNOSBackend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
 	// TODO
-	return nil, errors.New("not implemented")
+	return nil, ErrNotImplemented
+}
+
+func (b NeteaseNOSBackend) RenamePrefixOrObject(path, newPath string) error {
+	// TODO
+	return ErrNotImplemented
 }
 
 // GetObject retrieves an object from Netease Cloud NOS bucket, at prefix

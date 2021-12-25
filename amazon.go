@@ -266,6 +266,11 @@ func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (Lis
 	return output.NextPage()
 }
 
+func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
+	// TODO
+	return ErrNotImplemented
+}
+
 // GetObject retrieves an object from Amazon S3 bucket, at prefix
 func (b AmazonS3Backend) GetObject(path string) (Object, error) {
 	var object Object

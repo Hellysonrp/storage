@@ -69,6 +69,7 @@ type (
 		GetObject(path string) (Object, error)
 		PutObject(path string, content []byte) error
 		DeleteObject(path string) error
+		RenamePrefixOrObject(path, newPath string) error
 	}
 
 	// BackendStream is a generic interface for storage backends that support streams
