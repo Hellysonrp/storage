@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	pathutil "path"
 	"strconv"
 	"strings"
@@ -267,8 +268,115 @@ func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (Lis
 }
 
 func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
-	// TODO
-	return ErrNotImplemented
+	// check if newPath is already occupied
+	headObjectInput := &s3.HeadObjectInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(pathutil.Join(b.Prefix, newPath)),
+	}
+
+	_, err := b.Client.HeadObject(headObjectInput)
+	if err != nil {
+		aerr, ok := err.(awserr.Error)
+		if !ok || aerr.Code() != "NotFound" {
+			return err
+		}
+	} else {
+		return ErrNewPathNotEmpty
+	}
+
+	listObjectsInput := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(b.Bucket),
+		Prefix:  aws.String(pathutil.Join(b.Prefix, newPath)),
+		MaxKeys: aws.Int64(1),
+	}
+
+	listObjectsOutput, err := b.Client.ListObjectsV2(listObjectsInput)
+	if err != nil {
+		return err
+	}
+
+	if listObjectsOutput.KeyCount != nil && *listObjectsOutput.KeyCount > 0 {
+		return ErrNewPathNotEmpty
+	}
+
+	// check if path is an object or a prefix with objects
+	headObjectInput = &s3.HeadObjectInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+	}
+	_, err = b.Client.HeadObject(headObjectInput)
+	if err != nil {
+		aerr, ok := err.(awserr.Error)
+		if !ok || aerr.Code() == "NotFound" {
+			return err
+		}
+
+		// is prefix with objects
+		isEof := false
+		var continuationToken string
+
+		prefix := pathutil.Join(b.Prefix, path)
+		for !isEof {
+			listObjectsInput = &s3.ListObjectsV2Input{
+				Bucket: aws.String(b.Bucket),
+				Prefix: aws.String(prefix),
+			}
+			if continuationToken != "" {
+				listObjectsInput.ContinuationToken = aws.String(continuationToken)
+			}
+
+			listObjectsOutput, err = b.Client.ListObjectsV2(listObjectsInput)
+			if err != nil {
+				return err
+			}
+
+			if listObjectsOutput.ContinuationToken != nil {
+				continuationToken = *listObjectsOutput.ContinuationToken
+			}
+
+			isEof = listObjectsOutput.IsTruncated == nil || !*listObjectsOutput.IsTruncated
+
+			for _, obj := range listObjectsOutput.Contents {
+				if obj.Key == nil || *obj.Key == "" {
+					continue
+				}
+
+				key := removePrefixFromObjectPath(prefix, *obj.Key)
+				if objectPathIsInvalid(key) {
+					continue
+				}
+
+				err = b.moveObject(*obj.Key, pathutil.Join(b.Prefix, newPath, key))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		// is object
+		err = b.moveObject(pathutil.Join(b.Prefix, path), pathutil.Join(b.Prefix, newPath))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (b AmazonS3Backend) moveObject(path string, newPath string) error {
+	s3Input := &s3.CopyObjectInput{
+		Bucket:     aws.String(b.Bucket),
+		CopySource: aws.String(url.PathEscape(b.Bucket + "/" + path)),
+		Key:        aws.String(newPath),
+	}
+
+	_, err := b.Client.CopyObject(s3Input)
+
+	if err != nil {
+		return err
+	}
+
+	return b.DeleteObject(path)
 }
 
 // GetObject retrieves an object from Amazon S3 bucket, at prefix
