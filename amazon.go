@@ -78,8 +78,7 @@ func (l *s3ListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirectoryO
 	r.directoriesRead = make([]Metadata, 0, 5)
 	r.filesRead = make([]Metadata, 0, 5)
 
-	prefix := pathutil.Join(l.backend.Prefix, l.prefix)
-	prefix = strings.Trim(prefix, "/")
+	prefix := cleanPrefix(pathutil.Join(l.backend.Prefix, l.prefix))
 	prefix = prefix + "/"
 
 	req := &s3.ListObjectsV2Input{
@@ -98,8 +97,8 @@ func (l *s3ListObjectsFromDirectoryOutput) NextPage() (ListObjectsFromDirectoryO
 		return nil, err
 	}
 
-	if output.ContinuationToken != nil {
-		r.continuationToken = *output.ContinuationToken
+	if output.NextContinuationToken != nil {
+		r.continuationToken = *output.NextContinuationToken
 	}
 
 	for _, d := range output.CommonPrefixes {
@@ -206,7 +205,7 @@ func NewAmazonS3BackendWithCredentials(bucket string, prefix string, region stri
 // ListObjects lists all objects in Amazon S3 bucket, at prefix
 func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 	var objects []Object
-	prefix = pathutil.Join(b.Prefix, prefix)
+	prefix = cleanPrefix(pathutil.Join(b.Prefix, prefix))
 	s3Input := &s3.ListObjectsInput{
 		Bucket: aws.String(b.Bucket),
 		Prefix: aws.String(prefix),
@@ -246,7 +245,7 @@ func (b AmazonS3Backend) ListObjects(prefix string) ([]Object, error) {
 func (b AmazonS3Backend) ListObjectsFromDirectory(prefix string, limit int) (ListObjectsFromDirectoryOutput, error) {
 	s3Input := &s3.HeadObjectInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, prefix)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, prefix))),
 	}
 
 	_, err := b.Client.HeadObject(s3Input)
@@ -271,7 +270,7 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 	// check if newPath is already occupied
 	headObjectInput := &s3.HeadObjectInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, newPath)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, newPath))),
 	}
 
 	_, err := b.Client.HeadObject(headObjectInput)
@@ -286,7 +285,7 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 
 	listObjectsInput := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(b.Bucket),
-		Prefix:  aws.String(pathutil.Join(b.Prefix, newPath)),
+		Prefix:  aws.String(cleanPrefix(pathutil.Join(b.Prefix, newPath)) + "/"),
 		MaxKeys: aws.Int64(1),
 	}
 
@@ -302,12 +301,12 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 	// check if path is an object or a prefix with objects
 	headObjectInput = &s3.HeadObjectInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
 	}
 	_, err = b.Client.HeadObject(headObjectInput)
 	if err != nil {
 		aerr, ok := err.(awserr.Error)
-		if !ok || aerr.Code() == "NotFound" {
+		if !ok || aerr.Code() != "NotFound" {
 			return err
 		}
 
@@ -315,7 +314,7 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 		isEof := false
 		var continuationToken string
 
-		prefix := pathutil.Join(b.Prefix, path)
+		prefix := cleanPrefix(pathutil.Join(b.Prefix, path)) + "/"
 		for !isEof {
 			listObjectsInput = &s3.ListObjectsV2Input{
 				Bucket: aws.String(b.Bucket),
@@ -342,11 +341,11 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 				}
 
 				key := removePrefixFromObjectPath(prefix, *obj.Key)
-				if objectPathIsInvalid(key) {
+				if key == "" || key == "/" {
 					continue
 				}
 
-				err = b.moveObject(*obj.Key, pathutil.Join(b.Prefix, newPath, key))
+				err = b.moveObject(*obj.Key, cleanPrefix(pathutil.Join(b.Prefix, newPath, key)))
 				if err != nil {
 					return err
 				}
@@ -354,7 +353,7 @@ func (b AmazonS3Backend) RenamePrefixOrObject(path, newPath string) error {
 		}
 	} else {
 		// is object
-		err = b.moveObject(pathutil.Join(b.Prefix, path), pathutil.Join(b.Prefix, newPath))
+		err = b.moveObject(cleanPrefix(pathutil.Join(b.Prefix, path)), cleanPrefix(pathutil.Join(b.Prefix, newPath)))
 		if err != nil {
 			return err
 		}
@@ -410,7 +409,7 @@ func (b AmazonS3Backend) PutObject(path string, content []byte) error {
 func (b AmazonS3Backend) DeleteObject(path string) error {
 	s3Input := &s3.DeleteObjectInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
 	}
 	_, err := b.Client.DeleteObject(s3Input)
 	return err
@@ -422,7 +421,7 @@ func (b AmazonS3Backend) GetObjectStream(path string) (*ObjectStream, error) {
 	object.Path = path
 	s3Input := &s3.GetObjectInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
 	}
 	s3Result, err := b.Client.GetObject(s3Input)
 	if err != nil {
@@ -451,7 +450,7 @@ func (b AmazonS3Backend) PutObjectStream(path string, content io.Reader) error {
 
 	s3Input := &s3manager.UploadInput{
 		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(pathutil.Join(b.Prefix, path)),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
 		Body:   content,
 	}
 
@@ -512,7 +511,7 @@ func (b AmazonS3Backend) HandleHttpFileDownload(w http.ResponseWriter, r *http.R
 
 	s3Input := &s3.GetObjectInput{
 		Bucket:            aws.String(b.Bucket),
-		Key:               aws.String(pathutil.Join(b.Prefix, path)),
+		Key:               aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
 		IfModifiedSince:   ifModifiedSince,
 		IfUnmodifiedSince: ifUnmodifiedSince,
 	}
