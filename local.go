@@ -212,6 +212,23 @@ func (b LocalFilesystemBackend) RenamePrefixOrObject(path, newPath string) error
 		return err
 	}
 
+	// create parent folder if not exists
+	lastDirSeparatorIndex := strings.LastIndex(fullNewPath, "/")
+	parentFolderName := fullNewPath[:lastDirSeparatorIndex]
+	if parentFolderName != "" {
+		_, err = os.Stat(parentFolderName)
+		if err != nil {
+			if os.IsNotExist(err) {
+				err = os.MkdirAll(parentFolderName, 0777)
+				if err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+	}
+
 	return os.Rename(fullPath, fullNewPath)
 }
 
