@@ -466,6 +466,40 @@ func (b AmazonS3Backend) PutObjectStream(path string, content io.Reader) error {
 	return err
 }
 
+func (b AmazonS3Backend) PutObjectStreamWithACL(path string, content io.Reader, ACL *string) error {
+	var ct string
+	if seeker, ok := content.(io.ReadSeeker); ok {
+		buff := make([]byte, 512)
+		_, err := seeker.Seek(0, io.SeekStart)
+		if err == nil {
+			n, err := seeker.Read(buff)
+			if err == nil || errors.Is(err, io.EOF) {
+				ct = http.DetectContentType(buff[:n])
+			}
+			// try to seek to the beginning of the file
+			seeker.Seek(0, io.SeekStart)
+		}
+	}
+
+	s3Input := &s3manager.UploadInput{
+		Bucket: aws.String(b.Bucket),
+		Key:    aws.String(cleanPrefix(pathutil.Join(b.Prefix, path))),
+		Body:   content,
+		ACL:    ACL,
+	}
+
+	if ct != "" {
+		s3Input.ContentType = aws.String(ct)
+	}
+
+	if b.SSE != "" {
+		s3Input.ServerSideEncryption = aws.String(b.SSE)
+	}
+
+	_, err := b.Uploader.Upload(s3Input)
+	return err
+}
+
 func (b AmazonS3Backend) HandleHttpFileDownload(w http.ResponseWriter, r *http.Request, path string) {
 	// https://github.com/oxyno-zeta/s3-proxy/blob/08de1e6c9b694134912ad0fcd17461d1225b39fe/pkg/s3-proxy/server/server.go#L238
 
