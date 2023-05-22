@@ -78,7 +78,6 @@ type (
 		// ListObjectStreams(prefix string) ([]ObjectStream, error)
 		GetObjectStream(path string) (*ObjectStream, error)
 		PutObjectStream(path string, content io.Reader) error
-		PutObjectStreamWithACL(path string, content io.Reader, ACL *string) error
 		HandleHttpFileDownload(w http.ResponseWriter, r *http.Request, path string)
 	}
 )
